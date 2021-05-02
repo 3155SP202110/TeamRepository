@@ -6,22 +6,75 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import pandas as pd
 import plotly.express as px
-import plotly
-
-
+import pycountry
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
-df = pd.read_csv('hotel_bookings.csv')
+#To convert country abbreviations to their full names
+def conversion(value):
+    cname=""
+    try:
+        cname=pycountry.countries.get(alpha_3=value).name
+    except Exception:
+        pass
+    return (cname)
+
+#read csv's
+df = pd.read_csv('hotel_bookings.csv',
+                 parse_dates= {"date" : ["arrival_date_year","arrival_date_month","arrival_date_day_of_month"]},
+                 keep_date_col=True)
 dfGrouped = pd.read_csv('hotelgrouped.csv')
 dfMarketSegment = pd.read_csv('hotelgroupedMarketSegment.csv')
 
+#Applies the conversion function on all entries in the country column
+df['country']=df['country'].apply(conversion)
+
+# Sorting values
+df = df.sort_values(by=['lead_time'],
+ascending=[True]).reset_index()
+
+#By Country Histogram data
+country_data = px.histogram(df, x="country")
+country_data.update_layout(
+    title_text='Visitors from each Country',
+    xaxis_title_text='Country',
+    yaxis_title_text='Number of bookings'
+)
+
+#create people line chart
 peopleLineChart = px.line(dfGrouped, x="date", y="adults", title='Number of people booking by date')
 
+#create market segment pie chart
 marketSegmentPie = px.pie(dfMarketSegment, values='count', names='market_segment',title='Market Segment Pie Chart')
 
+#People Pie Chart
+#Combine The People Columns
+number_of_people=[df['adults'][i]+df['children'][i] + df['babies'][i] for i in range(len(df['adults']))]
+df['number_of_people']=number_of_people
+
+#Counter column for aggregation
+counter=[]
+for i in range(len(df['number_of_people'])):
+        counter.append('1')
+df['counter']=counter
+people_data=px.pie(df, values='counter', names='number_of_people', title='Percentage of number of visitants in bookings')
+people_data.update_layout(legend_title_text = "# of People")
+people_data.update_traces(textposition='inside', textinfo='percent+label')
+
+#Lead time Histogram
+#Modifying entries to be more understandable with words
+df.loc[df.is_canceled == 0, "is_canceled"] = "Not Cancelled"
+df.loc[df.is_canceled == 1, "is_canceled"] = "Cancelled"
+lead_data = px.histogram(df, x="lead_time", color="is_canceled")
+lead_data.update_layout(
+    title_text='Lead Time Histogram',
+    xaxis_title_text='Lead Time (days)',
+    yaxis_title_text='Number of visitors'
+)
+
+#html layout
 app.layout = html.Div(children=[
     html.H1(children='HotelWizard',
             style={
@@ -36,7 +89,21 @@ app.layout = html.Div(children=[
         id = 'piechart',
         figure = marketSegmentPie
     ),
-
+    html.Hr(),
+    dcc.Graph(
+        id="histogram",
+        figure=country_data
+    ),
+    html.Hr(),
+    dcc.Graph(
+        id = 'piechart2',
+        figure = people_data
+    ),
+    html.Hr(),
+    dcc.Graph(
+        id = 'histogram2',
+        figure = lead_data
+    ),
 
     html.Div([
             html.Hr(),
@@ -58,7 +125,7 @@ app.layout = html.Div(children=[
 
 
 
-
+#calculator callback
 @app.callback(Output('output-submit', 'children'),
                 [Input('btn-submit', 'n_clicks')],
                 [State('input-1-submit', 'value'),State('input-2-submit', 'value')])
@@ -68,6 +135,7 @@ def update_output(clicked, input1, input2):
         a, b, c, d, e = calculator(int(input1), int(input2))
         return 'Bills: ' + str(a) + ', Supplies: ' + str(b) + ', Maintenance: ' + str(c) + ', Total labor: ' + str(d) + ', Total spending: ' + str(e)
 
+#budget calculator logic
 def calculator(numRooms, nightlyRate):
     revenue = nightlyRate * numRooms * 30 * .65  # average of 65% capacity - 30 days
 
