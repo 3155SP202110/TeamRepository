@@ -1,5 +1,6 @@
 #***rename to app.py inorder to run***
-
+#***download the 3 .csv files and place in same folder as py script***
+#***hotel_bookings.csv hotelgrouped.csv hotelgroupedMarketSegment.csv***
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
